@@ -1,0 +1,6 @@
+<script type="text/javascript">
+    var myWebSocket = new WebSocket("ws://localhost:9000");
+    myWebSocket.onmessage = function(evt) {
+        alert(JSON.stringify(evt.data))
+    };
+</script>

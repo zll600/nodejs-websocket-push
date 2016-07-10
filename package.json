@@ -1,0 +1,25 @@
+{
+  "name": "nodejs-websocket-push",
+  "version": "1.0.0",
+  "description": "README\r ======",
+  "main": "server.js",
+  "dependencies": {
+    "ws": "^1.1.1",
+    "express": "^4.14.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nzhong/nodejs-websocket-push.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nzhong/nodejs-websocket-push/issues"
+  },
+  "homepage": "https://github.com/nzhong/nodejs-websocket-push#readme"
+}
