@@ -148,7 +148,7 @@
 
             async testRestAPI() {
                 try {
-                    const response = await fetch('http://localhost:8000/');
+                    const response = await fetch('/api');
                     const data = await response.json();
                     this.addMessage(`REST API Response: ${JSON.stringify(data)}`);
                 } catch (error) {
