@@ -1,6 +1,184 @@
-<script type="text/javascript">
-    var myWebSocket = new WebSocket("ws://localhost:9000");
-    myWebSocket.onmessage = function(evt) {
-        alert(JSON.stringify(evt.data))
-    };
-</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .message {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        input[type="text"] {
+            width: 300px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket Client</h1>
+        <div id="status" class="status disconnected">Disconnected</div>
+        
+        <div>
+            <button id="connectBtn">Connect</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+            <button id="testRestBtn">Test REST API</button>
+        </div>
+        
+        <div>
+            <input type="text" id="messageInput" placeholder="Enter message to send" disabled>
+            <button id="sendBtn" disabled>Send Message</button>
+        </div>
+        
+        <h3>Messages:</h3>
+        <div id="messages"></div>
+    </div>
+
+    <script type="module">
+        class WebSocketClient {
+            constructor() {
+                this.ws = null;
+                this.isConnected = false;
+                this.initializeUI();
+            }
+
+            initializeUI() {
+                this.statusEl = document.getElementById('status');
+                this.messagesEl = document.getElementById('messages');
+                this.connectBtn = document.getElementById('connectBtn');
+                this.disconnectBtn = document.getElementById('disconnectBtn');
+                this.sendBtn = document.getElementById('sendBtn');
+                this.testRestBtn = document.getElementById('testRestBtn');
+                this.messageInput = document.getElementById('messageInput');
+
+                // Event listeners
+                this.connectBtn.addEventListener('click', () => this.connect());
+                this.disconnectBtn.addEventListener('click', () => this.disconnect());
+                this.sendBtn.addEventListener('click', () => this.sendMessage());
+                this.testRestBtn.addEventListener('click', () => this.testRestAPI());
+                
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.sendMessage();
+                });
+            }
+
+            connect() {
+                try {
+                    this.ws = new WebSocket("ws://localhost:9000");
+                    
+                    this.ws.onopen = () => {
+                        this.isConnected = true;
+                        this.updateConnectionStatus('Connected', true);
+                        this.addMessage('Connected to WebSocket server');
+                    };
+
+                    this.ws.onmessage = (evt) => {
+                        this.addMessage(`Server: ${evt.data}`);
+                    };
+
+                    this.ws.onclose = () => {
+                        this.isConnected = false;
+                        this.updateConnectionStatus('Disconnected', false);
+                        this.addMessage('Connection closed');
+                    };
+
+                    this.ws.onerror = (error) => {
+                        this.addMessage(`Error: ${error.message || 'WebSocket error'}`);
+                    };
+
+                } catch (error) {
+                    this.addMessage(`Connection failed: ${error.message}`);
+                }
+            }
+
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                }
+            }
+
+            sendMessage() {
+                const message = this.messageInput.value.trim();
+                if (message && this.isConnected) {
+                    this.ws.send(message);
+                    this.addMessage(`You: ${message}`);
+                    this.messageInput.value = '';
+                }
+            }
+
+            async testRestAPI() {
+                try {
+                    const response = await fetch('http://localhost:8000/');
+                    const data = await response.json();
+                    this.addMessage(`REST API Response: ${JSON.stringify(data)}`);
+                } catch (error) {
+                    this.addMessage(`REST API Error: ${error.message}`);
+                }
+            }
+
+            updateConnectionStatus(status, connected) {
+                this.statusEl.textContent = status;
+                this.statusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
+                
+                this.connectBtn.disabled = connected;
+                this.disconnectBtn.disabled = !connected;
+                this.sendBtn.disabled = !connected;
+                this.messageInput.disabled = !connected;
+            }
+
+            addMessage(message) {
+                const messageEl = document.createElement('div');
+                messageEl.className = 'message';
+                messageEl.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                this.messagesEl.appendChild(messageEl);
+                this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+            }
+        }
+
+        // Initialize the WebSocket client when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new WebSocketClient();
+        });
+    </script>
+</body>
+</html>
