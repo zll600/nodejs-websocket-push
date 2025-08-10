@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Client</title>
+    <title>WebSocket & SSE Client</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -34,6 +34,25 @@
             border-radius: 4px;
             border-left: 4px solid #bee5eb;
         }
+        .message.websocket {
+            border-left-color: #007bff;
+            background-color: #e3f2fd;
+        }
+        .message.sse {
+            border-left-color: #28a745;
+            background-color: #e8f5e8;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #495057;
+        }
         button {
             background-color: #007bff;
             color: white;
@@ -56,18 +75,33 @@
 </head>
 <body>
     <div class="container">
-        <h1>WebSocket Client</h1>
-        <div id="status" class="status disconnected">Disconnected</div>
+        <h1>WebSocket & SSE Client Demo</h1>
         
-        <div>
-            <button id="connectBtn">Connect</button>
-            <button id="disconnectBtn" disabled>Disconnect</button>
-            <button id="testRestBtn">Test REST API</button>
+        <div class="section">
+            <h3>WebSocket Connection</h3>
+            <div id="wsStatus" class="status disconnected">Disconnected</div>
+            <div>
+                <button id="wsConnectBtn">Connect WebSocket</button>
+                <button id="wsDisconnectBtn" disabled>Disconnect WebSocket</button>
+            </div>
+            <div>
+                <input type="text" id="messageInput" placeholder="Enter message to send" disabled>
+                <button id="sendBtn" disabled>Send Message</button>
+            </div>
         </div>
-        
-        <div>
-            <input type="text" id="messageInput" placeholder="Enter message to send" disabled>
-            <button id="sendBtn" disabled>Send Message</button>
+
+        <div class="section">
+            <h3>Server-Sent Events (SSE) Connection</h3>
+            <div id="sseStatus" class="status disconnected">Disconnected</div>
+            <div>
+                <button id="sseConnectBtn">Connect SSE</button>
+                <button id="sseDisconnectBtn" disabled>Disconnect SSE</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Actions</h3>
+            <button id="testRestBtn">Test REST API (Broadcasts to Both)</button>
         </div>
         
         <h3>Messages:</h3>
@@ -75,25 +109,37 @@
     </div>
 
     <script type="module">
-        class WebSocketClient {
+        class DualClient {
             constructor() {
                 this.ws = null;
-                this.isConnected = false;
+                this.eventSource = null;
+                this.wsConnected = false;
+                this.sseConnected = false;
                 this.initializeUI();
             }
 
             initializeUI() {
-                this.statusEl = document.getElementById('status');
-                this.messagesEl = document.getElementById('messages');
-                this.connectBtn = document.getElementById('connectBtn');
-                this.disconnectBtn = document.getElementById('disconnectBtn');
+                // WebSocket elements
+                this.wsStatusEl = document.getElementById('wsStatus');
+                this.wsConnectBtn = document.getElementById('wsConnectBtn');
+                this.wsDisconnectBtn = document.getElementById('wsDisconnectBtn');
                 this.sendBtn = document.getElementById('sendBtn');
-                this.testRestBtn = document.getElementById('testRestBtn');
                 this.messageInput = document.getElementById('messageInput');
 
+                // SSE elements
+                this.sseStatusEl = document.getElementById('sseStatus');
+                this.sseConnectBtn = document.getElementById('sseConnectBtn');
+                this.sseDisconnectBtn = document.getElementById('sseDisconnectBtn');
+
+                // Shared elements
+                this.testRestBtn = document.getElementById('testRestBtn');
+                this.messagesEl = document.getElementById('messages');
+
                 // Event listeners
-                this.connectBtn.addEventListener('click', () => this.connect());
-                this.disconnectBtn.addEventListener('click', () => this.disconnect());
+                this.wsConnectBtn.addEventListener('click', () => this.connectWebSocket());
+                this.wsDisconnectBtn.addEventListener('click', () => this.disconnectWebSocket());
+                this.sseConnectBtn.addEventListener('click', () => this.connectSSE());
+                this.sseDisconnectBtn.addEventListener('click', () => this.disconnectSSE());
                 this.sendBtn.addEventListener('click', () => this.sendMessage());
                 this.testRestBtn.addEventListener('click', () => this.testRestAPI());
                 
@@ -102,47 +148,97 @@
                 });
             }
 
-            connect() {
+            connectWebSocket() {
                 try {
                     this.ws = new WebSocket("ws://localhost:9000");
                     
                     this.ws.onopen = () => {
-                        this.isConnected = true;
-                        this.updateConnectionStatus('Connected', true);
-                        this.addMessage('Connected to WebSocket server');
+                        this.wsConnected = true;
+                        this.updateWSStatus('Connected', true);
+                        this.addMessage('Connected to WebSocket server', 'websocket');
                     };
 
                     this.ws.onmessage = (evt) => {
-                        this.addMessage(`Server: ${evt.data}`);
+                        this.addMessage(`WS Server: ${evt.data}`, 'websocket');
                     };
 
                     this.ws.onclose = () => {
-                        this.isConnected = false;
-                        this.updateConnectionStatus('Disconnected', false);
-                        this.addMessage('Connection closed');
+                        this.wsConnected = false;
+                        this.updateWSStatus('Disconnected', false);
+                        this.addMessage('WebSocket connection closed', 'websocket');
                     };
 
                     this.ws.onerror = (error) => {
-                        this.addMessage(`Error: ${error.message || 'WebSocket error'}`);
+                        this.addMessage(`WebSocket Error: ${error.message || 'Connection error'}`, 'websocket');
                     };
 
                 } catch (error) {
-                    this.addMessage(`Connection failed: ${error.message}`);
+                    this.addMessage(`WebSocket connection failed: ${error.message}`, 'websocket');
                 }
             }
 
-            disconnect() {
+            disconnectWebSocket() {
                 if (this.ws) {
                     this.ws.close();
                 }
             }
 
+            connectSSE() {
+                try {
+                    this.eventSource = new EventSource('/events');
+                    
+                    this.eventSource.onopen = () => {
+                        this.sseConnected = true;
+                        this.updateSSEStatus('Connected', true);
+                        this.addMessage('Connected to SSE server', 'sse');
+                    };
+
+                    this.eventSource.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.addMessage(`SSE: ${data.message}`, 'sse');
+                        } catch (e) {
+                            this.addMessage(`SSE: ${event.data}`, 'sse');
+                        }
+                    };
+
+                    this.eventSource.addEventListener('broadcast', (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            this.addMessage(`SSE Broadcast: ${data.message}`, 'sse');
+                        } catch (e) {
+                            this.addMessage(`SSE Broadcast: ${event.data}`, 'sse');
+                        }
+                    });
+
+                    this.eventSource.onerror = (error) => {
+                        this.sseConnected = false;
+                        this.updateSSEStatus('Disconnected', false);
+                        this.addMessage('SSE connection error or closed', 'sse');
+                    };
+
+                } catch (error) {
+                    this.addMessage(`SSE connection failed: ${error.message}`, 'sse');
+                }
+            }
+
+            disconnectSSE() {
+                if (this.eventSource) {
+                    this.eventSource.close();
+                    this.sseConnected = false;
+                    this.updateSSEStatus('Disconnected', false);
+                    this.addMessage('SSE connection closed', 'sse');
+                }
+            }
+
             sendMessage() {
                 const message = this.messageInput.value.trim();
-                if (message && this.isConnected) {
+                if (message && this.wsConnected) {
                     this.ws.send(message);
-                    this.addMessage(`You: ${message}`);
+                    this.addMessage(`You: ${message}`, 'websocket');
                     this.messageInput.value = '';
+                } else if (message && !this.wsConnected) {
+                    this.addMessage('Cannot send message: WebSocket not connected', 'websocket');
                 }
             }
 
@@ -150,34 +246,42 @@
                 try {
                     const response = await fetch('/api');
                     const data = await response.json();
-                    this.addMessage(`REST API Response: ${JSON.stringify(data)}`);
+                    this.addMessage(`REST API Response: ${JSON.stringify(data, null, 2)}`, 'default');
                 } catch (error) {
-                    this.addMessage(`REST API Error: ${error.message}`);
+                    this.addMessage(`REST API Error: ${error.message}`, 'default');
                 }
             }
 
-            updateConnectionStatus(status, connected) {
-                this.statusEl.textContent = status;
-                this.statusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
+            updateWSStatus(status, connected) {
+                this.wsStatusEl.textContent = status;
+                this.wsStatusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
                 
-                this.connectBtn.disabled = connected;
-                this.disconnectBtn.disabled = !connected;
+                this.wsConnectBtn.disabled = connected;
+                this.wsDisconnectBtn.disabled = !connected;
                 this.sendBtn.disabled = !connected;
                 this.messageInput.disabled = !connected;
             }
 
-            addMessage(message) {
+            updateSSEStatus(status, connected) {
+                this.sseStatusEl.textContent = status;
+                this.sseStatusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
+                
+                this.sseConnectBtn.disabled = connected;
+                this.sseDisconnectBtn.disabled = !connected;
+            }
+
+            addMessage(message, type = 'default') {
                 const messageEl = document.createElement('div');
-                messageEl.className = 'message';
+                messageEl.className = `message ${type}`;
                 messageEl.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
                 this.messagesEl.appendChild(messageEl);
                 this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
             }
         }
 
-        // Initialize the WebSocket client when the page loads
+        // Initialize the client when the page loads
         document.addEventListener('DOMContentLoaded', () => {
-            new WebSocketClient();
+            new DualClient();
         });
     </script>
 </body>

@@ -12,7 +12,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('.'));
 
 // Create WebSocket server
-const wss = new WebSocketServer({ port: 9000 });
+const wss = new WebSocketServer({ 
+  port: 9000,
+  host: '127.0.0.1'  // Force IPv4
+});
+
+// Store SSE connections
+const sseClients = new Set();
 
 // WebSocket connection handling
 wss.on('connection', (ws, req) => {
@@ -39,26 +45,91 @@ wss.on('error', (error) => {
   console.error('WebSocket Server error:', error);
 });
 
+// SSE endpoint
+app.get('/events', (req, res) => {
+  console.log(`New SSE connection from ${req.socket.remoteAddress}`);
+  
+  // Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  // Add client to the set
+  sseClients.add(res);
+  
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({
+    type: 'connection',
+    message: 'Connected to SSE server!',
+    timestamp: new Date().toISOString()
+  })}\n\n`);
+
+  // Handle client disconnect
+  req.on('close', () => {
+    console.log('SSE connection closed');
+    sseClients.delete(res);
+  });
+
+  req.on('error', (error) => {
+    console.error('SSE connection error:', error);
+    sseClients.delete(res);
+  });
+});
+
+// Helper function to broadcast to SSE clients
+function broadcastToSSE(message, eventType = 'message') {
+  let clientCount = 0;
+  const data = JSON.stringify({
+    type: eventType,
+    message: message,
+    timestamp: new Date().toISOString()
+  });
+  
+  sseClients.forEach((client) => {
+    try {
+      client.write(`event: ${eventType}\ndata: ${data}\n\n`);
+      clientCount++;
+    } catch (error) {
+      console.error('Error sending SSE message:', error);
+      sseClients.delete(client);
+    }
+  });
+  
+  return clientCount;
+}
+
 // REST API endpoints
 app.get('/api', (req, res) => {
   console.log('REST Server received GET request');
   
   const message = "Broadcast to client: REST Server received GET";
-  let clientCount = 0;
+  let wsClientCount = 0;
+  let sseClientCount = 0;
   
   // Broadcast to all connected WebSocket clients
   wss.clients.forEach((client) => {
     if (client.readyState === client.OPEN) {
       client.send(message);
-      clientCount++;
+      wsClientCount++;
     }
   });
   
-  console.log(`Message broadcasted to ${clientCount} WebSocket clients`);
+  // Broadcast to all connected SSE clients
+  sseClientCount = broadcastToSSE(message, 'broadcast');
+  
+  console.log(`Message broadcasted to ${wsClientCount} WebSocket clients and ${sseClientCount} SSE clients`);
   res.json({ 
     success: true, 
     message: 'GET request processed successfully',
-    broadcastedTo: clientCount
+    broadcastedTo: {
+      websocket: wsClientCount,
+      sse: sseClientCount,
+      total: wsClientCount + sseClientCount
+    }
   });
 });
 
@@ -67,13 +138,17 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    connectedClients: wss.clients.size
+    connectedClients: {
+      websocket: wss.clients.size,
+      sse: sseClients.size,
+      total: wss.clients.size + sseClients.size
+    }
   });
 });
 
 // Start HTTP server
 const PORT = process.env.PORT || 8000;
-const HOST = process.env.HOST || 'localhost';
+const HOST = process.env.HOST || '127.0.0.1';  // Force IPv4
 
 const server = app.listen(PORT, HOST, () => {
   const { address, port } = server.address();
